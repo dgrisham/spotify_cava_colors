@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 from PIL import Image
 from time import sleep
 from io import BytesIO
@@ -16,39 +16,43 @@ HUE = 0
 SATURATION = 1
 VALUE = 2
 
-FILE_PATH = os.path.realpath(__file__)[:os.path.realpath(__file__).rfind("/")]
+FILE_PATH = os.path.realpath(__file__)[: os.path.realpath(__file__).rfind("/")]
 REFRESH_TOKEN_PATH = FILE_PATH + "/auth/refresh_token"
 ACCESS_TOKEN_PATH = FILE_PATH + "/auth/access_token"
 APP_CREDENTIALS_PATH = FILE_PATH + "/auth/app_credentials"
 HOME_DIR = os.path.expanduser("~")
-CAVA_CONFIG = HOME_DIR + "/.config/cava/config"
+CAVA_CONFIG = HOME_DIR + "/dotfiles/cava/config"
+
 
 def log(string):
     if "-d" in sys.argv:
         print(string)
 
+
 def print_color(color):
-    r, g, b = int(color[RED]*255), int(color[GREEN]*255), int(color[BLUE]*255)
-    log("\x1b[48;2;%d;%d;%dm        \x1b[0m #%02x%02x%02x" % (r,g,b,r,g,b))
+    r, g, b = int(color[RED] * 255), int(color[GREEN] * 255), int(color[BLUE] * 255)
+    log("\x1b[48;2;%d;%d;%dm        \x1b[0m #%02x%02x%02x" % (r, g, b, r, g, b))
+
 
 def bucket_sort(pixels, levels):
     color_ranges = [
-            max(pixels, key=lambda x: x[color])[color] -
-            min(pixels, key=lambda x: x[color])[color]
-            for color in [RED, GREEN, BLUE]
-            ]
+        max(pixels, key=lambda x: x[color])[color]
+        - min(pixels, key=lambda x: x[color])[color]
+        for color in [RED, GREEN, BLUE]
+    ]
 
     split_color = color_ranges.index(max(color_ranges))
     sorted_px = sorted(pixels, key=lambda x: x[split_color])
 
     # Bisect the pixels
-    px1 = sorted_px[:len(sorted_px)/2]
-    px2 = sorted_px[len(sorted_px)/2:]
+    px1 = sorted_px[: len(sorted_px) / 2]
+    px2 = sorted_px[len(sorted_px) / 2 :]
     levels -= 1
     if levels <= 0:
         return [px1, px2]
     else:
         return bucket_sort(px1, levels) + bucket_sort(px2, levels)
+
 
 class RequestCtrl:
     GET = requests.get
@@ -76,9 +80,7 @@ class RequestCtrl:
         url = endpoint["url"]
         method = endpoint["method"]
         log("Making request to '%s'..." % url)
-        headers = {
-                "Authorization": "Bearer %s" % self.access_token
-                }
+        headers = {"Authorization": "Bearer %s" % self.access_token}
         if method.__name__ == self.POST.__name__:
             if endpoint == self.NEW_TOKEN:
                 headers.pop("Authorization")
@@ -98,11 +100,11 @@ class RequestCtrl:
         if "error" in json:
             if endpoint != self.NEW_TOKEN:
                 token_extras = {
-                        "client_id": self.client_id,
-                        "client_secret": self.client_secret,
-                        "refresh_token": self.refresh_token,
-                        "grant_type": "refresh_token"
-                        }
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "refresh_token": self.refresh_token,
+                    "grant_type": "refresh_token",
+                }
                 token_r = self.make_request(self.NEW_TOKEN, extra=token_extras)
                 self.access_token = token_r["access_token"]
                 with open(ACCESS_TOKEN_PATH, "w") as f:
@@ -114,14 +116,20 @@ class RequestCtrl:
         else:
             return json
 
+
 def best_color(colors):
-    fitnesses = [color[VALUE]*300 for color in colors]
+    fitnesses = [color[VALUE] * 300 for color in colors]
     rgb_colors = [colorsys.hsv_to_rgb(c[HUE], c[SATURATION], c[VALUE]) for c in colors]
     for i in range(len(rgb_colors)):
         color = rgb_colors[i]
-        color_difference = abs(color[RED] - color[GREEN]) + abs(color[RED] - color[BLUE]) + abs(color[GREEN] - color[BLUE])
-        fitnesses[i] += color_difference*150
+        color_difference = (
+            abs(color[RED] - color[GREEN])
+            + abs(color[RED] - color[BLUE])
+            + abs(color[GREEN] - color[BLUE])
+        )
+        fitnesses[i] += color_difference * 150
     return colors[fitnesses.index(max(fitnesses))]
+
 
 if __name__ == "__main__":
     ctrl = RequestCtrl()
@@ -137,17 +145,22 @@ if __name__ == "__main__":
     img = Image.open(BytesIO(requests.get(smallest_url).content))
     px = img.getdata()
     px = list(px)
-    px = filter(lambda x: not (x[RED]>235 and x[GREEN]>235 and x[BLUE]>235), px)
-    px = filter(lambda x: not (x[RED]<30 and x[GREEN]<30 and x[BLUE]<30), px)
-    px = map(lambda x: (x[RED]/255., x[GREEN]/255., x[BLUE]/255.), px)
+    px = filter(lambda x: not (x[RED] > 235 and x[GREEN] > 235 and x[BLUE] > 235), px)
+    px = filter(lambda x: not (x[RED] < 30 and x[GREEN] < 30 and x[BLUE] < 30), px)
+    px = map(lambda x: (x[RED] / 255.0, x[GREEN] / 255.0, x[BLUE] / 255.0), px)
 
     # Split the pixels into 2**n buckets
     buckets = bucket_sort(px, 3)
     colors = []
     for bucket in buckets:
-        color_sums = reduce(lambda x, y: (x[RED]+y[RED], x[GREEN]+y[GREEN], x[BLUE]+y[BLUE]), bucket)
-        rgb_color = map(lambda x: x/len(bucket), color_sums)
-        hsv_color = colorsys.rgb_to_hsv(rgb_color[RED], rgb_color[GREEN], rgb_color[BLUE])
+        color_sums = reduce(
+            lambda x, y: (x[RED] + y[RED], x[GREEN] + y[GREEN], x[BLUE] + y[BLUE]),
+            bucket,
+        )
+        rgb_color = map(lambda x: x / len(bucket), color_sums)
+        hsv_color = colorsys.rgb_to_hsv(
+            rgb_color[RED], rgb_color[GREEN], rgb_color[BLUE]
+        )
         print_color(rgb_color)
         colors.append(hsv_color)
 
@@ -155,8 +168,13 @@ if __name__ == "__main__":
     color1 = best_color(colors)
     colors.remove(color1)
     # Filter colors with similar hues to the first chosen
-    no_similar_colors = filter(lambda x: min(1-abs(x[HUE]-color1[HUE]), abs(x[HUE]-color1[HUE])) > 0.1, colors)
-    if len(no_similar_colors) != 0 and any(map(lambda x: x[VALUE]>0.4, no_similar_colors)):
+    no_similar_colors = filter(
+        lambda x: min(1 - abs(x[HUE] - color1[HUE]), abs(x[HUE] - color1[HUE])) > 0.1,
+        colors,
+    )
+    if len(no_similar_colors) != 0 and any(
+        map(lambda x: x[VALUE] > 0.4, no_similar_colors)
+    ):
         color2 = max(no_similar_colors, key=lambda x: x[VALUE])
     else:
         color2 = best_color(colors)
@@ -171,8 +189,16 @@ if __name__ == "__main__":
     print_color(rgb_color1)
     log("Color 2:")
     print_color(rgb_color2)
-    r1, g1, b1 = int(rgb_color1[RED]*255), int(rgb_color1[GREEN]*255), int(rgb_color1[BLUE]*255)
-    r2, g2, b2 = int(rgb_color2[RED]*255), int(rgb_color2[GREEN]*255), int(rgb_color2[BLUE]*255)
+    r1, g1, b1 = (
+        int(rgb_color1[RED] * 255),
+        int(rgb_color1[GREEN] * 255),
+        int(rgb_color1[BLUE] * 255),
+    )
+    r2, g2, b2 = (
+        int(rgb_color2[RED] * 255),
+        int(rgb_color2[GREEN] * 255),
+        int(rgb_color2[BLUE] * 255),
+    )
     # Clamp colors in case of floating point rounding errors
     r1, g1, b1 = max(r1, 0), max(g1, 0), max(b1, 0)
     r2, g2, b2 = max(r2, 0), max(g2, 0), max(b2, 0)
@@ -181,17 +207,21 @@ if __name__ == "__main__":
 
     with open(CAVA_CONFIG) as f:
         config_contents = f.read()
-    config_contents = re.sub(r"^gradient_color_1 = '#.*'$",
-            "gradient_color_1 = '#%02x%02x%02x'" % (r1, g1, b1),
-            config_contents,
-            flags=re.MULTILINE)
-    config_contents = re.sub(r"^gradient_color_2 = '#.*'$",
-            "gradient_color_2 = '#%02x%02x%02x'" % (r2, g2, b2),
-            config_contents,
-            flags=re.MULTILINE)
+    config_contents = re.sub(
+        r"^gradient_color_1 = '#.*'$",
+        "gradient_color_1 = '#%02x%02x%02x'" % (r1, g1, b1),
+        config_contents,
+        flags=re.MULTILINE,
+    )
+    config_contents = re.sub(
+        r"^gradient_color_2 = '#.*'$",
+        "gradient_color_2 = '#%02x%02x%02x'" % (r2, g2, b2),
+        config_contents,
+        flags=re.MULTILINE,
+    )
 
     with open(CAVA_CONFIG, "w") as f:
         f.write(config_contents)
 
     # Tell cava to reload its config
-    subprocess.Popen(["pkill", "-USR1", "cava"])
+    subprocess.Popen(["pkill", "-USR2", "cava"])
